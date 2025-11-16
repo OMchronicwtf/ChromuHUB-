@@ -1,0 +1,798 @@
+local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
+WindUI:AddTheme({
+    Name = "E-vil Royal",
+    Accent = WindUI:Gradient({
+        ["0"] = { Color = Color3.fromHex("#360273"), Transparency = 0 },
+        ["100"] = { Color = Color3.fromHex("#004d57"), Transparency = 0 }
+    }, { Rotation = 45 }),
+    Background = WindUI:Gradient({
+        ["0"] = { Color = Color3.fromHex("#360273"), Transparency = 0 },
+        ["100"] = { Color = Color3.fromHex("#004d57"), Transparency = 0 }
+    }, { Rotation = 45 }),
+    Dialog = Color3.fromHex("#1a1a1d"),
+    Outline = Color3.fromHex("#FFD700"),
+    Text = Color3.fromHex("#FFFFFF"),
+    Placeholder = Color3.fromHex("#c0a763"),
+    Button = Color3.fromHex("#411b65"),
+    Icon = Color3.fromHex("#FFD700")
+})
+WindUI:SetTheme("E-vil Royal")
+local Window = WindUI:CreateWindow({
+    Title = "Chronos x Da7muHUB",
+    Icon = "moon-star",
+    Author = "by @wtfchronic & @da7mu",
+    Folder = "ChronosHUB",
+    Size = UDim2.fromOffset(580, 460),
+    MinSize = Vector2.new(560, 350),
+    MaxSize = Vector2.new(850, 560),
+    Transparent = true,
+    Theme = "E-vil Royal",
+    Resizable = true,
+    SideBarWidth = 200,
+    BackgroundImageTransparency = 0.3,
+    HideSearchBar = false,
+    ScrollBarEnabled = true
+})
+Window:EditOpenButton({
+    Title = "ChromuHUB",
+    Icon = "moon",
+    CornerRadius = UDim.new(0, 16),
+    StrokeThickness = 2,
+    Color = ColorSequence.new(Color3.fromHex("#574094"), Color3.fromHex("#FFD700")),
+    OnlyMobile = false,
+    Enabled = true,
+    Draggable = true
+})
+Window:DisableTopbarButtons({"Fullscreen"})
+Window:Tag({Title = "DEV", Color = Color3.fromHex("#FFD700"), Radius = 13})
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Workspace = game:GetService("Workspace")
+local LocalPlayer = Players.LocalPlayer
+local GetPlayerDataRemote = ReplicatedStorage.Remotes.Extras:FindFirstChild("GetPlayerData")
+
+local matchActive = false
+local CurrentRoles = {}
+local rolesUpdateConn = nil
+local lastRolesUpdate = 0
+
+local function GetRoles()
+    local remote = ReplicatedStorage:FindFirstChild("GetPlayerData", true)
+    if not remote then return nil end
+    local ok, data = pcall(remote.InvokeServer, remote)
+    if not ok or typeof(data) ~= "table" then return nil end
+    return data
+end
+
+local function IsCharacterAlive()
+    local char = LocalPlayer.Character
+    if not char then return false end
+    local humanoid = char:FindFirstChild("Humanoid")
+    return humanoid and humanoid.Health > 0
+end
+
+local function CanCollectGun()
+    if not matchActive or not IsCharacterAlive() then return false end
+    local info = CurrentRoles[LocalPlayer.Name]
+    if not info or info.Dead then return false end
+    local role = info.Role
+    if role == "Murderer" or role == "Sheriff" or role == "Hero" then return false end
+    return true
+end
+
+local function StartRolesUpdater()
+    if rolesUpdateConn then return end
+    rolesUpdateConn = RunService.Heartbeat:Connect(function()
+        if tick() - lastRolesUpdate < 0.5 or not matchActive then return end
+        lastRolesUpdate = tick()
+        local data = GetRoles()
+        if data then CurrentRoles = data end
+    end)
+end
+
+local function findMapModel()
+    for _, obj in pairs(Workspace:GetChildren()) do
+        if (obj:IsA("Model") or obj:IsA("Folder")) and obj:GetAttribute("MapID") ~= nil then
+            return obj
+        end
+    end
+    return nil
+end
+
+local lastMapCheck = 0
+local matchMonitorConn = nil
+
+local function SetMatchActive(state)
+    matchActive = state
+    if state then
+        StartRolesUpdater()
+    else
+        CurrentRoles = {}
+        if rolesUpdateConn then
+            rolesUpdateConn:Disconnect()
+            rolesUpdateConn = nil
+        end
+    end
+end
+
+local function StartMatchMonitor()
+    if matchMonitorConn then return end
+    matchMonitorConn = RunService.Heartbeat:Connect(function()
+        if tick() - lastMapCheck < 1 then return end
+        lastMapCheck = tick()
+        local map = findMapModel()
+        if map and not matchActive then
+            SetMatchActive(true)
+        elseif not map and matchActive then
+            SetMatchActive(false)
+        end
+    end)
+end
+StartMatchMonitor()
+
+local MainTab = Window:Tab({Title = "Main", Icon = "book"})
+local MainSection = MainTab:Section({Title = "Main", Icon = "user", Box = true, Opened = true})
+
+local autoGunEnabled = false
+local autoGunConnection = nil
+local lastGunObject = nil
+local lastGrabTime = 0
+local GRAB_INTERVAL = 0.25
+local autoGunInitialized = false
+
+local function findGunDrop()
+    local map = findMapModel()
+    if map then return map:FindFirstChild("GunDrop") end
+    return nil
+end
+
+local function triggerTouchInterest(gun)
+    local char = LocalPlayer.Character
+    if not char then return false end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return false end
+    firetouchinterest(hrp, gun, 0)
+    task.wait(0.05)
+    firetouchinterest(hrp, gun, 1)
+    for i = 1, 10 do
+        firetouchinterest(hrp, gun, 0)
+        task.wait(0.03)
+        firetouchinterest(hrp, gun, 1)
+        task.wait(0.03)
+    end
+    return true
+end
+
+local function collectGun(notify)
+    local gun = findGunDrop()
+    if not gun then
+        lastGunObject = nil
+        if notify then
+            WindUI:Notify({Title = "Can't Collect", Content = "Gun not found...", Duration = 3, Icon = "circle-x"}, true)
+        end
+        return
+    end
+    if not CanCollectGun() then
+        lastGunObject = nil
+        if notify then
+            local info = CurrentRoles[LocalPlayer.Name]
+            local reason = "You are not in the match"
+            if matchActive and info then
+                if info.Dead then
+                    reason = "You are no longer in the match"
+                elseif info.Role == "Murderer" then
+                    reason = "You are the Murderer"
+                elseif info.Role == "Sheriff" then
+                    reason = "You have already collected the gun."
+                elseif info.Role == "Hero" then
+                    reason = "You have already collected the gun."
+                end
+            end
+            WindUI:Notify({Title = "Can't Collect", Content = reason, Duration = 3, Icon = "circle-x"}, true)
+        end
+        return
+    end
+    local now = tick()
+    if gun ~= lastGunObject then
+        lastGunObject = gun
+        lastGrabTime = 0
+    end
+    if now - lastGrabTime < GRAB_INTERVAL then return end
+    if triggerTouchInterest(gun) then
+        lastGrabTime = now
+        if notify then
+            WindUI:Notify({Title = "Gun Collected", Content = "Gun collected successfully!", Duration = 2, Icon = "hand-grab"}, true)
+        end
+    end
+end
+
+MainSection:Toggle({
+    Title = "Auto-Collect Gun",
+    Desc = "Automatically collects gun upon drop.",
+    Icon = "circle-check",
+    Type = "Checkbox",
+    Default = false,
+    Callback = function(state)
+        if not autoGunInitialized then
+            autoGunInitialized = true
+            return
+        end
+        autoGunEnabled = state
+        if state then
+            if autoGunConnection then autoGunConnection:Disconnect() end
+            autoGunConnection = RunService.Heartbeat:Connect(function()
+                if autoGunEnabled then collectGun(false) end
+            end)
+            WindUI:Notify({Title = "Auto-Collect Gun", Content = "Enabled", Duration = 2, Icon = "hand-grab"}, true)
+        else
+            if autoGunConnection then
+                autoGunConnection:Disconnect()
+                autoGunConnection = nil
+            end
+            lastGunObject = nil
+            lastGrabTime = 0
+            WindUI:Notify({Title = "Auto-Collect Gun", Content = "Disabled", Duration = 2, Icon = "circle-x"}, true)
+        end
+    end
+})
+
+MainSection:Button({
+    Title = "Self-Collect Gun",
+    Justify = "Center",
+    IconAlign = "Right",
+    Icon = "hand-grab",
+    Callback = function()
+        lastGunObject = nil
+        lastGrabTime = 0
+        collectGun(true)
+    end
+})
+MainSection:Divider()
+
+local autoShootEnabled = false
+local autoShootConnection = nil
+local autoShootInitialized = false
+local lastShootTime = 0
+local SHOOT_INTERVAL = 0.15
+local smoothedTargetPos = nil
+local SMOOTH_FACTOR = 0.3
+local aimDot = nil
+local aimDotConnection = nil
+
+local function CanShoot()
+    if not matchActive or not IsCharacterAlive() then return false end
+    local info = CurrentRoles[LocalPlayer.Name]
+    if not info or info.Dead then return false end
+    local role = info.Role
+    if role ~= "Sheriff" and role ~= "Hero" then return false end
+    return true
+end
+
+local function EquipGun()
+    local char = LocalPlayer.Character
+    if not char then return false end
+    if char:FindFirstChild("Gun") then return true end
+    local backpackGun = LocalPlayer.Backpack:FindFirstChild("Gun")
+    if backpackGun then
+        backpackGun.Parent = char
+        task.wait(0.1)
+        return true
+    end
+    return false
+end
+
+local function GetGunRemote()
+    local char = LocalPlayer.Character
+    if not char then return nil end
+    local gun = char:FindFirstChild("Gun")
+    if not gun then return nil end
+    return gun:FindFirstChild("KnifeLocal", true):FindFirstChild("CreateBeam"):FindFirstChild("RemoteFunction")
+end
+
+local function ShootAt(position)
+    local remote = GetGunRemote()
+    if not remote then return false end
+    local args = { 1, Vector3.new(position.X, position.Y, position.Z), "AH2" }
+    local success = pcall(remote.InvokeServer, remote, unpack(args))
+    return success
+end
+
+local function FindMurderer()
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= LocalPlayer then
+            local info = CurrentRoles[plr.Name]
+            if info and info.Role == "Murderer" and not info.Dead then
+                return plr
+            end
+        end
+    end
+    return nil
+end
+
+local function HasClearLineOfSight(targetPlayer)
+    local char = LocalPlayer.Character
+    if not char then return false end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return false end
+    local targetChar = targetPlayer.Character
+    if not targetChar then return false end
+    local targetHrp = targetChar:FindFirstChild("HumanoidRootPart")
+    if not targetHrp then return false end
+    local blacklist = { char, targetChar }
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= LocalPlayer and plr ~= targetPlayer and plr.Character then
+            local pChar = plr.Character
+            if pChar:FindFirstChild("Humanoid") and pChar.Humanoid.Health > 0 then
+                table.insert(blacklist, pChar)
+            end
+        end
+    end
+    local params = RaycastParams.new()
+    params.FilterType = Enum.RaycastFilterType.Blacklist
+    params.FilterDescendantsInstances = blacklist
+    local offsets = {
+        Vector3.new(0, 0, 0),
+        Vector3.new(1, 0, 0),
+        Vector3.new(-1, 0, 0),
+        Vector3.new(0, 1, 0),
+        Vector3.new(0, -1, 0)
+    }
+    for _, offset in ipairs(offsets) do
+        local startPos = hrp.Position + offset
+        local targetPos = targetHrp.Position + offset
+        local direction = (targetPos - startPos)
+        local distance = direction.Magnitude
+        direction = direction.Unit * distance
+        local result = Workspace:Raycast(startPos, direction, params)
+        if not result then return true end
+        if (result.Position - targetPos).Magnitude <= 3 then return true end
+    end
+    return false
+end
+
+local function GetPredictedPosition(targetPlayer)
+    local targetChar = targetPlayer.Character
+    if not targetChar then return nil end
+    local targetHrp = targetChar:FindFirstChild("HumanoidRootPart")
+    if not targetHrp then return nil end
+    local velocity = targetHrp.AssemblyLinearVelocity
+    local speed = velocity.Magnitude
+    local predictionStrength = 0.06
+    if speed > 30 then predictionStrength = 0.12
+    elseif speed > 15 then predictionStrength = 0.09
+    else predictionStrength = 0.04 end
+    local rawPrediction = targetHrp.Position + (velocity * predictionStrength)
+    rawPrediction = Vector3.new(rawPrediction.X, math.max(rawPrediction.Y, targetHrp.Position.Y - 2), rawPrediction.Z)
+    if smoothedTargetPos then
+        smoothedTargetPos = smoothedTargetPos:lerp(rawPrediction, SMOOTH_FACTOR)
+    else
+        smoothedTargetPos = rawPrediction
+    end
+    return smoothedTargetPos
+end
+
+local function CreateAimDot()
+    if aimDot then aimDot:Destroy() end
+    aimDot = Instance.new("Part")
+    aimDot.Name = "AutoShootAimDot"
+    aimDot.Size = Vector3.new(0.5, 0.5, 0.5)
+    aimDot.Material = Enum.Material.Neon
+    aimDot.Color = Color3.fromRGB(147, 0, 255)
+    aimDot.Shape = Enum.PartType.Ball
+    aimDot.CanCollide = false
+    aimDot.Anchored = true
+    aimDot.Parent = Workspace
+    local highlight = Instance.new("Highlight")
+    highlight.FillTransparency = 0.3
+    highlight.OutlineTransparency = 0
+    highlight.FillColor = Color3.fromRGB(147, 0, 255)
+    highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+    highlight.Parent = aimDot
+    if aimDotConnection then aimDotConnection:Disconnect() end
+    aimDotConnection = RunService.RenderStepped:Connect(function()
+        if aimDot and aimDot.Parent then
+            local pulse = 0.5 + math.sin(tick() * 8) * 0.2
+            aimDot.Size = Vector3.new(pulse, pulse, pulse)
+        end
+    end)
+end
+
+local function UpdateAimDot(position, isBlocked)
+    if not aimDot then CreateAimDot() end
+    aimDot.Position = position
+    aimDot.Transparency = isBlocked and 0.8 or 0.3
+end
+
+local function RemoveAimDot()
+    if aimDotConnection then aimDotConnection:Disconnect() aimDotConnection = nil end
+    if aimDot then aimDot:Destroy() aimDot = nil end
+    smoothedTargetPos = nil
+end
+
+local function AutoShootLoop()
+    if not CanShoot() then RemoveAimDot() return end
+    local murderer = FindMurderer()
+    if not murderer or not murderer.Character then RemoveAimDot() return end
+    local aimPosition = GetPredictedPosition(murderer)
+    if not aimPosition then RemoveAimDot() return end
+    local isBlocked = not HasClearLineOfSight(murderer)
+    UpdateAimDot(aimPosition, isBlocked)
+    if isBlocked then return end
+    if not LocalPlayer.Character:FindFirstChild("Gun") then
+        EquipGun()
+        return
+    end
+    local now = tick()
+    if now - lastShootTime < SHOOT_INTERVAL then return end
+    if ShootAt(aimPosition) then lastShootTime = now end
+end
+
+MainSection:Toggle({
+    Title = "Shoot Assist",
+    Desc = "Attempts to automatically shoot the murderer.",
+    Icon = "circle-check",
+    Type = "Checkbox",
+    Default = false,
+    Callback = function(state)
+        if not autoShootInitialized then
+            autoShootInitialized = true
+            return
+        end
+        autoShootEnabled = state
+        if state then
+            if autoShootConnection then autoShootConnection:Disconnect() end
+            autoShootConnection = RunService.Heartbeat:Connect(function()
+                pcall(AutoShootLoop)
+            end)
+            WindUI:Notify({Title = "Shoot Assist", Content = "Enabled", Duration = 3, Icon = "crosshair"}, true)
+        else
+            if autoShootConnection then
+                autoShootConnection:Disconnect()
+                autoShootConnection = nil
+            end
+            RemoveAimDot()
+            lastShootTime = 0
+            WindUI:Notify({Title = "Shoot Assist", Content = "Disabled", Duration = 2, Icon = "circle-x"}, true)
+        end
+    end
+})
+
+local NotifyHighlightSection = MainTab:Section({Title = "Notify & Highlight", Icon = "eye", Box = true, Opened = true})
+
+local LastGunDrop = nil
+local NotifyEnabled = false
+local NotifyConnection = nil
+local NotifyInitialized = false
+local NotifyRolesSnapshot = {}
+local SelectedNotifyElements = {}
+local NotifyHardLock = false
+
+local function IsAlive(plr)
+    if not matchActive then return false end
+    local info = CurrentRoles[plr.Name]
+    return info and not info.Dead
+end
+
+local function CheckGunDrop()
+    if not NotifyEnabled or NotifyHardLock then return end
+    local map = findMapModel()
+    if not map then return end
+    local gunDrop = map:FindFirstChild("GunDrop")
+    if gunDrop and gunDrop ~= LastGunDrop then
+        LastGunDrop = gunDrop
+        if not NotifyHardLock and not autoGunEnabled then
+            WindUI:Notify({Title = "Gun Drop", Content = "The gun has dropped!", Duration = 4, Icon = "circle-chevron-down"}, true)
+        end
+    elseif not gunDrop then
+        LastGunDrop = nil
+    end
+end
+
+local function IsPlayerAliveForNotify(plr, rolesTable)
+    local info = rolesTable[plr.Name]
+    return info and not info.Dead
+end
+
+local function CheckRoleChanges()
+    if not NotifyEnabled or NotifyHardLock then return end
+    local newRoles = GetRoles()
+    if not newRoles then return end
+    for playerName, info in pairs(newRoles) do
+        local plr = Players:FindFirstChild(playerName)
+        if plr and info.Role and IsPlayerAliveForNotify(plr, newRoles) then
+            local lastRole = NotifyRolesSnapshot[playerName]
+            if lastRole ~= info.Role then
+                if not NotifyHardLock then
+                    local notify = {
+                        Duration = 5,
+                        Icon = info.Role == "Murderer" and "skull" or info.Role == "Sheriff" and "shield-check" or info.Role == "Hero" and "star"
+                    }
+                    if notify.Icon then
+                        notify.Title = info.Role
+                        notify.Content = plr.DisplayName .. " is the " .. info.Role
+                        WindUI:Notify(notify, true)
+                    end
+                end
+            end
+        end
+    end
+    for playerName in pairs(NotifyRolesSnapshot) do
+        if not newRoles[playerName] then
+            NotifyRolesSnapshot[playerName] = nil
+        end
+    end
+    for playerName, info in pairs(newRoles) do
+        if info.Role then
+            NotifyRolesSnapshot[playerName] = info.Role
+        end
+    end
+end
+
+local function EnableNotify()
+    if NotifyConnection then return end
+    NotifyEnabled = true
+    NotifyHardLock = false
+    NotifyConnection = RunService.RenderStepped:Connect(function()
+        if not NotifyEnabled or NotifyHardLock then return end
+        if table.find(SelectedNotifyElements, "Notify Gun Drop") then CheckGunDrop() end
+        if table.find(SelectedNotifyElements, "Notify Role Changes") then CheckRoleChanges() end
+    end)
+end
+
+local function DisableNotify()
+    if not NotifyEnabled then return end
+    NotifyHardLock = true
+    NotifyEnabled = false
+    if NotifyConnection then NotifyConnection:Disconnect() NotifyConnection = nil end
+    task.defer(function()
+        NotifyRolesSnapshot = {}
+        LastGunDrop = nil
+    end)
+end
+
+NotifyHighlightSection:Toggle({
+    Title = "Notify Events",
+    Desc = "Notifies when the selected events occur.",
+    Icon = "circle-check",
+    Type = "Checkbox",
+    Default = false,
+    Callback = function(state)
+        if not NotifyInitialized then
+            NotifyInitialized = true
+            return
+        end
+        if state then
+            EnableNotify()
+            WindUI:Notify({Title = "Notify", Content = "Enabled", Duration = 2, Icon = "bell"}, true)
+        else
+            DisableNotify()
+            WindUI:Notify({Title = "Notify", Content = "Disabled", Duration = 2, Icon = "bell-off"}, true)
+        end
+    end
+})
+
+NotifyHighlightSection:Dropdown({
+    Title = "Events",
+    Values = {"Notify Gun Drop", "Notify Role Changes"},
+    Value = {"Notify Gun Drop", "Notify Role Changes"},
+    Multi = true,
+    AllowNone = true,
+    Callback = function(selected) SelectedNotifyElements = selected end
+})
+NotifyHighlightSection:Divider()
+
+local ESPHighlights = {}
+local MapGunHighlight = nil
+local MapCoinHighlights = {}
+local SelectedElements = {}
+local highlightActive = false
+local renderConn = nil
+local gunRGBConn = nil
+local highlightInitialized = false
+
+local ROLE_COLORS = {
+    Innocent = Color3.fromRGB(180,180,180),
+    Murderer = Color3.fromRGB(225,0,0),
+    Sheriff = Color3.fromRGB(0,0,225),
+    Hero = Color3.fromRGB(255,215,0),
+    Zombie = Color3.fromRGB(255,170,0),
+    Survivor = Color3.fromRGB(0,180,225),
+    Freezer = Color3.fromRGB(100,255,252),
+    Runner = Color3.fromRGB(195,48,255)
+}
+local DEFAULT_COLOR = ROLE_COLORS.Innocent
+
+local function ShouldShow(plr)
+    return plr ~= LocalPlayer and IsAlive(plr)
+end
+
+local function ApplyPlayerHighlight(plr)
+    if ESPHighlights[plr] then return end
+    local char = plr.Character
+    if not char or not char:FindFirstChild("HumanoidRootPart") then return end
+    local hl = Instance.new("Highlight")
+    hl.Name = "PlayerESP"
+    hl.Adornee = char
+    hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    hl.FillTransparency = 0.5
+    hl.OutlineTransparency = 0
+    hl.OutlineColor = Color3.fromRGB(255,255,255)
+    hl.FillColor = DEFAULT_COLOR
+    hl.Parent = char
+    ESPHighlights[plr] = hl
+end
+
+local function RemovePlayerHighlight(plr)
+    if ESPHighlights[plr] then
+        ESPHighlights[plr]:Destroy()
+        ESPHighlights[plr] = nil
+    end
+end
+
+local function UpdatePlayerColor(plr)
+    local hl = ESPHighlights[plr]
+    if not hl then return end
+    local info = CurrentRoles[plr.Name]
+    if not info or not info.Role then
+        hl.FillColor = DEFAULT_COLOR
+        return
+    end
+    if info.Role == "Hero" then
+        local sheriff = Players:FindFirstChild(info.Sheriff or "")
+        hl.FillColor = (not sheriff or not IsAlive(sheriff)) and ROLE_COLORS.Hero or (ROLE_COLORS[info.Role] or DEFAULT_COLOR)
+    else
+        hl.FillColor = ROLE_COLORS[info.Role] or DEFAULT_COLOR
+    end
+end
+
+local function UpdatePlayerESP()
+    if not matchActive or not highlightActive then
+        for plr in pairs(ESPHighlights) do RemovePlayerHighlight(plr) end
+        ESPHighlights = {}
+        return
+    end
+    if table.find(SelectedElements, "Highlight Players") then
+        for _, plr in ipairs(Players:GetPlayers()) do
+            if ShouldShow(plr) then
+                if plr.Character and not plr.Character:FindFirstChild("PlayerESP") then
+                    ApplyPlayerHighlight(plr)
+                end
+                UpdatePlayerColor(plr)
+            else
+                RemovePlayerHighlight(plr)
+            end
+        end
+    else
+        for plr in pairs(ESPHighlights) do RemovePlayerHighlight(plr) end
+    end
+end
+
+local function UpdateVisuals()
+    UpdatePlayerESP()
+    if table.find(SelectedElements, "Highlight Gun") then
+        local map = findMapModel()
+        if map then
+            local gun = map:FindFirstChild("GunDrop")
+            if gun and gun ~= MapGunHighlight then
+                if MapGunHighlight then MapGunHighlight:Destroy() end
+                local hl = Instance.new("Highlight")
+                hl.Name = "MapGunESP"
+                hl.Adornee = gun
+                hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+                hl.FillTransparency = 0.3
+                hl.FillColor = Color3.fromRGB(255,255,255)
+                hl.OutlineTransparency = 0
+                hl.OutlineColor = Color3.fromRGB(255,0,255)
+                hl.Parent = gun
+                MapGunHighlight = hl
+                if gunRGBConn then gunRGBConn:Disconnect() end
+                local hue = 0
+                gunRGBConn = RunService.RenderStepped:Connect(function()
+                    if not MapGunHighlight or not MapGunHighlight.Parent then
+                        if gunRGBConn then gunRGBConn:Disconnect() gunRGBConn = nil end
+                        return
+                    end
+                    hue = (hue - 0.02) % 1
+                    MapGunHighlight.OutlineColor = Color3.fromHSV(hue, 1, 1)
+                end)
+            end
+        end
+    else
+        if MapGunHighlight then MapGunHighlight:Destroy() MapGunHighlight = nil end
+        if gunRGBConn then gunRGBConn:Disconnect() gunRGBConn = nil end
+    end
+    if table.find(SelectedElements, "Highlight Coins") then
+        local map = findMapModel()
+        if map then
+            local container = map:FindFirstChild("CoinContainer")
+            if container then
+                for _, child in pairs(container:GetChildren()) do
+                    local visual = child:FindFirstChild("CoinVisual")
+                    if visual and visual:IsA("BasePart") and not MapCoinHighlights[visual] then
+                        local hl = Instance.new("Highlight")
+                        hl.Name = "CoinESP"
+                        hl.Adornee = visual
+                        hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+                        hl.FillTransparency = 0.85
+                        hl.OutlineTransparency = 0.85
+                        hl.OutlineColor = Color3.fromRGB(255,255,255)
+                        hl.FillColor = Color3.fromHex("#8B00FF")
+                        hl.Parent = visual
+                        MapCoinHighlights[visual] = hl
+                    end
+                end
+            end
+        end
+    else
+        for _, hl in pairs(MapCoinHighlights) do if hl and hl.Parent then hl:Destroy() end end
+        MapCoinHighlights = {}
+    end
+end
+
+local function EnableESP()
+    if highlightActive then return end
+    highlightActive = true
+    if not renderConn then
+        renderConn = RunService.RenderStepped:Connect(UpdateVisuals)
+    end
+end
+
+local function DisableESP()
+    highlightActive = false
+    if renderConn then renderConn:Disconnect() renderConn = nil end
+    for plr in pairs(ESPHighlights) do RemovePlayerHighlight(plr) end
+    ESPHighlights = {}
+    if MapGunHighlight then MapGunHighlight:Destroy() MapGunHighlight = nil end
+    if gunRGBConn then gunRGBConn:Disconnect() gunRGBConn = nil end
+    for _, hl in pairs(MapCoinHighlights) do if hl and hl.Parent then hl:Destroy() end end
+    MapCoinHighlights = {}
+end
+
+Players.PlayerRemoving:Connect(RemovePlayerHighlight)
+
+NotifyHighlightSection:Toggle({
+    Title = "Highlight Elements",
+    Desc = "Highlights the selected elements in-match.",
+    Icon = "circle-check",
+    Type = "Checkbox",
+    Default = false,
+    Callback = function(state)
+        if not highlightInitialized then
+            highlightInitialized = true
+            return
+        end
+        if state then
+            EnableESP()
+            WindUI:Notify({Title = "Highlights", Content = "Enabled", Duration = 3, Icon = "highlighter"}, true)
+        else
+            DisableESP()
+            WindUI:Notify({Title = "Highlights", Content = "Disabled", Duration = 3, Icon = "circle-x"}, true)
+        end
+    end
+})
+
+NotifyHighlightSection:Dropdown({
+    Title = "Elements",
+    Values = {"Highlight Players", "Highlight Gun", "Highlight Coins"},
+    Value = {"Highlight Players"},
+    Multi = true,
+    AllowNone = true,
+    Callback = function(selection)
+        SelectedElements = selection
+        if highlightActive and matchActive then UpdateVisuals() end
+    end
+})
+
+local SettingsTab = Window:Tab({Title = "Settings", Icon = "settings"})
+local UISettingsSection = SettingsTab:Section({Title = "UI Settings", Box = true, Opened = true})
+
+UISettingsSection:Keybind({
+    Title = "UI Toggle Key",
+    Desc = "Key to open/close the UI",
+    Value = "L",
+    Callback = function(v) Window:SetToggleKey(Enum.KeyCode[v]) end
+})
+
+MainTab:Select()
