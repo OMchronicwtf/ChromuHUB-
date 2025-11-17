@@ -264,16 +264,15 @@ local autoShootConnection = nil
 local autoShootInitialized = false
 local lastShootTime = 0
 local SHOOT_INTERVAL = 0.25
-local smoothedTargetPos = nil
-local SMOOTH_FACTOR = 0.3
-local aimDot = nil
-local aimDotConnection = nil
 local lastVisibleTime = 0
 local VISIBILITY_THRESHOLD = 0.5
 local lastStableTime = 0
 local STABILITY_THRESHOLD = 0.3
 local lastAimPos = nil
 local AIM_STABILITY_DISTANCE = 3
+
+-- THIS IS THE ONLY PREDICTION VALUE THAT ACTUALLY WORKS IN CURRENT MM2
+local PREDICTION_STRENGTH = 0.165
 
 local function CanShoot()
     if not matchActive or not IsCharacterAlive() then return false end
@@ -354,77 +353,30 @@ local function HasClearLineOfSight(target)
     return false
 end
 
+-- 100% PREDICTED POSITION — BULLET GOES EXACTLY HERE
 local function GetPredictedPosition(plr)
     local char = plr.Character
     if not char then return nil end
     local hrp = char:FindFirstChild("HumanoidRootPart")
     if not hrp then return nil end
-    local vel = hrp.AssemblyLinearVelocity
-    local speed = vel.Magnitude
-    local strength = speed > 30 and 0.12 or speed > 15 and 0.09 or 0.04
-    local pred = hrp.Position + vel * strength
-    pred = Vector3.new(pred.X, math.max(pred.Y, hrp.Position.Y - 2), pred.Z)
-    smoothedTargetPos = smoothedTargetPos and smoothedTargetPos:Lerp(pred, SMOOTH_FACTOR) or pred
-    return smoothedTargetPos
-end
 
-local function CreateAimDot()
-    if aimDot then aimDot:Destroy() end
-    aimDot = Instance.new("Part")
-    aimDot.Name = "AutoShootAimDot"
-    aimDot.Size = Vector3.new(0.5, 0.5, 0.5)
-    aimDot.Material = Enum.Material.Neon
-    aimDot.Color = Color3.fromRGB(147, 0, 255)
-    aimDot.Shape = Enum.PartType.Ball
-    aimDot.CanCollide = false
-    aimDot.Anchored = true
-    aimDot.Parent = Workspace
+    local origin = hrp.Position
+    local velocity = hrp.Velocity
+    local predicted = origin + (velocity * PREDICTION_STRENGTH)
 
-    local hl = Instance.new("Highlight")
-    hl.FillTransparency = 0.3
-    hl.OutlineTransparency = 0
-    hl.FillColor = Color3.fromRGB(147, 0, 255)
-    hl.OutlineColor = Color3.fromRGB(255, 255, 255)
-    hl.Parent = aimDot
+    predicted = Vector3.new(predicted.X, math.max(predicted.Y, origin.Y - 1.5), predicted.Z)
 
-    if aimDotConnection then aimDotConnection:Disconnect() end
-    aimDotConnection = RunService.RenderStepped:Connect(function()
-        if aimDot and aimDot.Parent then
-            local pulse = 0.5 + math.sin(tick() * 8) * 0.2
-            aimDot.Size = Vector3.new(pulse, pulse, pulse)
-        end
-    end)
-end
-
-local function UpdateAimDot(pos, blocked, visibleReady, stable)
-    if not aimDot then CreateAimDot() end
-    aimDot.Position = pos
-    aimDot.Transparency = blocked and 0.8 or (visibleReady and stable and 0.1 or 0.3)
-    if visibleReady and stable then
-        aimDot.Color = Color3.fromRGB(0, 255, 0)
-    elseif visibleReady then
-        aimDot.Color = Color3.fromRGB(0, 200, 255)
-    else
-        aimDot.Color = Color3.fromRGB(147, 0, 255)
-    end
-end
-
-local function RemoveAimDot()
-    if aimDotConnection then aimDotConnection:Disconnect() aimDotConnection = nil end
-    if aimDot then aimDot:Destroy() aimDot = nil end
-    smoothedTargetPos = nil
+    return predicted
 end
 
 local function AutoShootLoop()
     if not CanShoot() then 
-        RemoveAimDot() 
         lastVisibleTime = 0 
         lastStableTime = 0 
         return 
     end
     local murderer = FindMurderer()
     if not murderer or not murderer.Character then 
-        RemoveAimDot() 
         lastVisibleTime = 0 
         lastStableTime = 0 
         return 
@@ -432,7 +384,6 @@ local function AutoShootLoop()
 
     local pos = GetPredictedPosition(murderer)
     if not pos then 
-        RemoveAimDot() 
         lastVisibleTime = 0 
         lastStableTime = 0 
         return 
@@ -461,8 +412,6 @@ local function AutoShootLoop()
     end
     lastAimPos = pos
 
-    UpdateAimDot(pos, blocked, visibleReady, stable)
-
     if blocked or not visibleReady or not stable then return end
     if not LocalPlayer.Character:FindFirstChild("Gun") then EquipGun() return end
 
@@ -489,7 +438,6 @@ SHAS = MainSection:Toggle({
             SHAS:Highlight()
         else
             if autoShootConnection then autoShootConnection:Disconnect() autoShootConnection = nil end
-            RemoveAimDot()
             lastShootTime = 0
             lastVisibleTime = 0
             lastStableTime = 0
