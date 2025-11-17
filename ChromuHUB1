@@ -259,6 +259,96 @@ SCG = MainSection:Button({
 
 MainSection:Space()
 
+local function getMapSpawns()
+    local map = findMapModel()
+    if not map then return end
+    
+    local folder = map:FindFirstChild("Spawns") or map:FindFirstChildWhichIsA("Folder") and map:FindFirstChildWhichIsA("Folder"):FindFirstChildWhichIsA("Model")
+    if not folder then
+        for _, v in map:GetChildren() do
+            if v.Name:lower():find("spawn") then
+                folder = v
+                break
+            end
+        end
+    end
+    if not folder then return end
+    
+    local spawns = {}
+    for _, obj in folder:GetDescendants() do
+        if (obj:IsA("BasePart") or obj:IsA("SpawnLocation")) and (obj.Name:lower():find("spawn") or obj:IsA("SpawnLocation")) then
+            table.insert(spawns, obj)
+        end
+    end
+    return #spawns > 0 and spawns or nil
+end
+
+TPMAP = MainSection:Button({
+    Title = "Teleport to Map",
+    Justify = "Center",
+    IconAlign = "Right",
+    Icon = "map",
+    Callback = function()
+        TPMAP:Highlight()
+        
+        local spawns = getMapSpawns()
+        if not spawns then
+            WindUI:Notify({Title = "Teleport Failed", Content = "No map found...", Duration = 3, Icon = "map-pin-off"})
+            return
+        end
+        
+        local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if not hrp then
+            WindUI:Notify({Title = "Teleport Failed", Content = "No character found!", Duration = 3, Icon = "map-pin-off"})
+            return
+        end
+        
+        local target = spawns[math.random(1, #spawns)]
+        hrp.CFrame = target.CFrame + Vector3.new(0, 6, 0)
+        WindUI:Notify({Title = "Teleported", Content = "Teleported to the map", Duration = 2, Icon = "map-pin-check-inside"})
+    end
+})
+
+TPLBB = MainSection:Button({
+    Title = "Teleport to Lobby",
+    Justify = "Center",
+    IconAlign = "Right",
+    Icon = "house",
+    Callback = function()
+        TPLBB:Highlight()
+        
+        local lobby = workspace:FindFirstChild("Lobby")
+        if not lobby or not lobby:FindFirstChild("Spawns") then
+            WindUI:Notify({Title = "Teleport Failed", Content = "Lobby not found...", Duration = 3, Icon = "map-pin-off"})
+            return
+        end
+        
+        local spawns = {}
+        for _, obj in lobby.Spawns:GetChildren() do
+            if obj:IsA("SpawnLocation") then
+                table.insert(spawns, obj)
+            end
+        end
+        
+        if #spawns == 0 then
+            WindUI:Notify({Title = "Teleport Failed", Content = "Lobby spawns not found...", Duration = 3, Icon = "map-pin-off"})
+            return
+        end
+        
+        local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if not hrp then
+            WindUI:Notify({Title = "Teleport Failed", Content = "No character found!", Duration = 3, Icon = "map-pin-off"})
+            return
+        end
+        
+        local target = spawns[math.random(1, #spawns)]
+        hrp.CFrame = target.CFrame + Vector3.new(0, 6, 0)
+        WindUI:Notify({Title = "Teleported", Content = "Teleported to the lobby", Duration = 2, Icon = "map-pin-check-inside"})
+    end
+})
+
+MainSection:Space()
+
 local autoShootEnabled = false
 local autoShootConnection = nil
 local autoShootInitialized = false
@@ -270,8 +360,6 @@ local lastStableTime = 0
 local STABILITY_THRESHOLD = 0.3
 local lastAimPos = nil
 local AIM_STABILITY_DISTANCE = 3
-
--- THIS IS THE ONLY PREDICTION VALUE THAT ACTUALLY WORKS IN CURRENT MM2
 local PREDICTION_STRENGTH = 0.165
 
 local function CanShoot()
@@ -353,7 +441,6 @@ local function HasClearLineOfSight(target)
     return false
 end
 
--- 100% PREDICTED POSITION — BULLET GOES EXACTLY HERE
 local function GetPredictedPosition(plr)
     local char = plr.Character
     if not char then return nil end
@@ -424,7 +511,7 @@ end
 
 SHAS = MainSection:Toggle({
     Title = "Shoot Assist (Inaccurate)",
-    Desc = "Attempts to automatically shoot the murderer.",
+    Desc = "Attempts to automatically shoot the murdering.",
     Icon = "circle-check",
     Type = "Checkbox",
     Default = false,
@@ -917,7 +1004,6 @@ end
 
 DiscordSection:Space()
 
--- ==================== SECOND SERVER ====================
 local InviteCode2 = "fSCf6dStmD"
 local DiscordAPI2 = "https://discord.com/api/v10/invites/" .. InviteCode2 .. "?with_counts=true&with_expiration=true"
 local Response2
