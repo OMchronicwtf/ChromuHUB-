@@ -830,6 +830,178 @@ QHI = NotifyHighlightSection:Button({
 })
 
 local SettingsTab = Window:Tab({Title = "Settings", Icon = "settings"})
+
+local InviteCode = "fu9fH2trGT"
+local DiscordAPI = "https://discord.com/api/v10/invites/" .. InviteCode .. "?with_counts=true&with_expiration=true"
+local Response
+local ErrorMessage = nil
+
+xpcall(function()
+    Response = game:GetService("HttpService"):JSONDecode(WindUI.Creator.Request({
+        Url = DiscordAPI,
+        Method = "GET",
+        Headers = { ["Accept"] = "application/json" }
+    }).Body)
+end, function(err)
+    warn("err fetching discord info: " .. tostring(err))
+    ErrorMessage = tostring(err)
+    Response = nil
+end)
+
+local DiscordSection = SettingsTab:Section({Title = "Script by @Da7mu & @wtfchronic", Box = true, Opened = false})
+local DiscordInfoParagraph
+
+if Response and Response.guild then
+    DiscordInfoParagraph = DiscordSection:Paragraph({
+        Title = Response.guild.name,
+        Desc =
+            '<font color="#52525b">•</font> Member Count: <font color="#e4e4e7">' .. tostring(Response.approximate_member_count) .. '</font>\n' ..
+            '<font color="#16a34a">•</font> Online Count: <font color="#e4e4e7">' .. tostring(Response.approximate_presence_count) .. '</font>',
+        Image = Response.guild.icon and
+            "https://cdn.discordapp.com/icons/" .. Response.guild.id .. "/" .. Response.guild.icon .. ".png?size=256" or
+            "users",
+        ImageSize = 42,
+        Thumbnail = Response.guild.banner and
+            "https://cdn.discordapp.com/banners/" .. Response.guild.id .. "/" .. Response.guild.banner .. ".png?size=480",
+        ThumbnailSize = Response.guild.banner and 80 or nil,
+    })
+
+    DINV1 = DiscordSection:Button({
+        Title = "Copy Discord Invite",
+        Justify = "Center",
+        IconAlign = "Right",
+        Icon = "link",
+        Callback = function()
+            DiscordInfoParagraph:Highlight()
+            DINV1:Highlight()
+            pcall(setclipboard, "https://discord.gg/" .. InviteCode)
+            WindUI:Notify({Title = "Copied!", Content = "Invite copied to clipboard", Duration = 3, Icon = "copy"})
+        end
+    })
+
+    DINVR1 = DiscordSection:Button({
+        Title = "Refresh Info",
+        Justify = "Center",
+        IconAlign = "Right",
+        Icon = "refresh-cw",
+        Callback = function()
+            DINVR1:Highlight()
+            WindUI:Notify({Title = "Refreshing...", Content = "Attempting to refresh information..", Duration = 3, Icon = "refresh-cw"})
+            xpcall(function()
+                local UpdatedResponse = game:GetService("HttpService"):JSONDecode(WindUI.Creator.Request({
+                    Url = DiscordAPI,
+                    Method = "GET",
+                }).Body)
+                if UpdatedResponse and UpdatedResponse.guild then
+                    DiscordInfoParagraph:SetDesc(
+                        '<font color="#52525b">•</font> Member Count: <font color="#e4e4e7">' .. tostring(UpdatedResponse.approximate_member_count) .. '</font>\n' ..
+                        '<font color="#16a34a">•</font> Online Count: <font color="#e4e4e7">' .. tostring(UpdatedResponse.approximate_presence_count) .. '</font>'
+                    )
+                    DiscordInfoParagraph:Highlight()
+                    WindUI:Notify({Title = "Refreshed!", Content = "Server info updated", Duration = 3, Icon = "circle-check"})
+                end
+            end, function(err)
+                warn("err updating discord info: " .. tostring(err))
+                WindUI:Notify({Title = "Failed", Content = "Could not refresh info", Duration = 3, Icon = "circle-x"})
+            end)
+        end
+    })
+else
+    DiscordSection:Paragraph({
+        Title = "Failed to load Discord server",
+        Desc = ErrorMessage or "Unknown error or invite expired",
+        Image = "triangle-alert",
+        ImageSize = 32,
+    })
+end
+
+DiscordSection:Space()
+
+-- ==================== SECOND SERVER ====================
+local InviteCode2 = "fSCf6dStmD"
+local DiscordAPI2 = "https://discord.com/api/v10/invites/" .. InviteCode2 .. "?with_counts=true&with_expiration=true"
+local Response2
+local ErrorMessage2 = nil
+
+xpcall(function()
+    Response2 = game:GetService("HttpService"):JSONDecode(WindUI.Creator.Request({
+        Url = DiscordAPI2,
+        Method = "GET",
+        Headers = { ["Accept"] = "application/json" }
+    }).Body)
+end, function(err)
+    warn("err fetching discord info (2): " .. tostring(err))
+    ErrorMessage2 = tostring(err)
+    Response2 = nil
+end)
+
+local DiscordInfoParagraph2
+
+if Response2 and Response2.guild then
+    DiscordInfoParagraph2 = DiscordSection:Paragraph({
+        Title = Response2.guild.name,
+        Desc =
+            '<font color="#52525b">•</font> Member Count: <font color="#e4e4e7">' .. tostring(Response2.approximate_member_count) .. '</font>\n' ..
+            '<font color="#16a34a">•</font> Online Count: <font color="#e4e4e7">' .. tostring(Response2.approximate_presence_count) .. '</font>',
+        Image = Response2.guild.icon and
+            "https://cdn.discordapp.com/icons/" .. Response2.guild.id .. "/" .. Response2.guild.icon .. ".png?size=256" or
+            "users",
+        ImageSize = 42,
+        Thumbnail = Response2.guild.banner and
+            "https://cdn.discordapp.com/banners/" .. Response2.guild.id .. "/" .. Response2.guild.banner .. ".png?size=480",
+        ThumbnailSize = Response2.guild.banner and 80 or nil,
+    })
+
+    DINV2 = DiscordSection:Button({
+        Title = "Copy Discord Invite",
+        Justify = "Center",
+        IconAlign = "Right",
+        Icon = "link",
+        Callback = function()
+            DiscordInfoParagraph2:Highlight()
+            DINV2:Highlight()
+            pcall(setclipboard, "https://discord.gg/" .. InviteCode2)
+            WindUI:Notify({Title = "Copied!", Content = "Invite copied to clipboard", Duration = 3, Icon = "copy"})
+        end
+    })
+
+    DINVR2 = DiscordSection:Button({
+        Title = "Refresh Info",
+        Justify = "Center",
+        IconAlign = "Right",
+        Icon = "refresh-cw",
+        Callback = function()
+            DINVR2:Highlight()
+            WindUI:Notify({Title = "Refreshing...", Content = "Attempting to refresh information..", Duration = 3, Icon = "refresh-cw"})
+            xpcall(function()
+                local UpdatedResponse = game:GetService("HttpService"):JSONDecode(WindUI.Creator.Request({
+                    Url = DiscordAPI2,
+                    Method = "GET",
+                }).Body)
+                if UpdatedResponse and UpdatedResponse.guild then
+                    DiscordInfoParagraph2:SetDesc(
+                        '<font color="#52525b">•</font> Member Count: <font color="#e4e4e7">' .. tostring(UpdatedResponse.approximate_member_count) .. '</font>\n' ..
+                        '<font color="#16a34a">•</font> Online Count: <font color="#e4e4e7">' .. tostring(UpdatedResponse.approximate_presence_count) .. '</font>'
+                    )
+                    DiscordInfoParagraph2:Highlight()
+                    WindUI:Notify({Title = "Refreshed!", Content = "Server info updated", Duration = 3, Icon = "circle-check"})
+                end
+            end, function(err)
+                warn("err updating discord info (2): " .. tostring(err))
+                WindUI:Notify({Title = "Failed", Content = "Could not refresh info", Duration = 3, Icon = "circle-x"})
+            end)
+        end
+    })
+else
+    DiscordSection:Paragraph({
+        Title = "Failed to load secondary Discord server",
+        Desc = ErrorMessage2 or "Unknown error or invite expired",
+        Image = "triangle-alert",
+        ImageSize = 32,
+    })
+end
+
+SettingsTab:Space()
 local UISettingsSection = SettingsTab:Section({Title = "UI Settings", Box = true, Opened = true})
 
 UISettingsSection:Keybind({
