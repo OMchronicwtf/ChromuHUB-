@@ -28,13 +28,14 @@ local Window = WindUI:CreateWindow({
     Size = UDim2.fromOffset(580, 460),
     MinSize = Vector2.new(560, 350),
     MaxSize = Vector2.new(850, 560),
-    Transparent = true,
+    Transparent = false,
     Theme = "E-vil Royal",
     Resizable = true,
     SideBarWidth = 200,
     BackgroundImageTransparency = 0.3,
     HideSearchBar = false,
-    ScrollBarEnabled = true
+    ScrollBarEnabled = true,
+    NewElements = true,
 })
 
 Window:EditOpenButton({
@@ -132,7 +133,7 @@ local function IsCharacterAlive()
 end
 
 local MainTab = Window:Tab({Title = "Main", Icon = "book"})
-local MainSection = MainTab:Section({Title = "Main", Icon = "user", Box = true, Opened = true})
+local MainSection = MainTab:Section({Title = "Main", Icon = "user", Box = true, Opened = false})
 
 local autoGunEnabled = false
 local autoGunConnection = nil
@@ -217,7 +218,7 @@ local function collectGun(notify)
     end
 end
 
-MainSection:Toggle({
+ACG = MainSection:Toggle({
     Title = "Auto-Collect Gun",
     Desc = "Automatically collects gun upon drop.",
     Icon = "circle-check",
@@ -232,6 +233,7 @@ MainSection:Toggle({
                 if autoGunEnabled then collectGun(false) end
             end)
             WindUI:Notify({Title = "Auto-Collect Gun", Content = "Enabled", Duration = 2, Icon = "hand-grab"})
+            ACG:Highlight()            
         else
             if autoGunConnection then autoGunConnection:Disconnect() autoGunConnection = nil end
             lastGunObject = nil
@@ -241,19 +243,21 @@ MainSection:Toggle({
     end
 })
 
-MainSection:Button({
+SCG = MainSection:Button({
     Title = "Self-Collect Gun",
     Justify = "Center",
     IconAlign = "Right",
     Icon = "hand-grab",
     Callback = function()
+        SCG:Highlight()
         lastGunObject = nil
         lastGrabTime = 0
         collectGun(true)
+        SCG:Highlight()
     end
 })
 
-MainSection:Divider()
+MainSection:Space()
 
 local autoShootEnabled = false
 local autoShootConnection = nil
@@ -469,7 +473,7 @@ local function AutoShootLoop()
     end
 end
 
-MainSection:Toggle({
+SHAS = MainSection:Toggle({
     Title = "Shoot Assist (Imperfect)",
     Desc = "Attempts to automatically shoot the murderer.",
     Icon = "circle-check",
@@ -482,6 +486,7 @@ MainSection:Toggle({
             if autoShootConnection then autoShootConnection:Disconnect() end
             autoShootConnection = RunService.Heartbeat:Connect(function() pcall(AutoShootLoop) end)
             WindUI:Notify({Title = "Shoot Assist", Content = "Enabled", Duration = 3, Icon = "target"})
+            SHAS:Highlight()
         else
             if autoShootConnection then autoShootConnection:Disconnect() autoShootConnection = nil end
             RemoveAimDot()
@@ -494,7 +499,9 @@ MainSection:Toggle({
     end
 })
 
-local NotifyHighlightSection = MainTab:Section({Title = "Notify & Highlight", Icon = "eye", Box = true, Opened = true})
+MainTab:Space()
+
+local NotifyHighlightSection = MainTab:Section({Title = "Notify & Highlight", Icon = "eye", Box = true, Opened = false})
 
 local LastGunDrop = nil
 local notifyEnabled = false
@@ -511,9 +518,16 @@ local function CheckGunDrop()
     local gun = map:FindFirstChild("GunDrop")
     if gun and gun ~= LastGunDrop then
         LastGunDrop = gun
-        if not autoGunEnabled then
-            WindUI:Notify({Title = "Gun Drop", Content = "The gun has dropped!", Duration = 4, Icon = "circle-chevron-down"})
-        end
+        WindUI:Notify({Title = "Gun Drop", Content = "The gun has dropped!", Duration = 4, Icon = "circle-chevron-down"})
+
+        local sound = Instance.new("Sound")
+        sound.SoundId = "rbxassetid://1862047553"
+        sound.Volume = 1
+        sound.Parent = game:GetService("SoundService")
+        sound:Play()
+        sound.Ended:Connect(function()
+            sound:Destroy()
+        end)
     elseif not gun then
         LastGunDrop = nil
     end
@@ -564,7 +578,7 @@ local function DisableNotify()
     StopSharedUpdater()
 end
 
-NotifyHighlightSection:Toggle({
+NOEV = NotifyHighlightSection:Toggle({
     Title = "Notify Events",
     Desc = "Notifies when the selected events occur.",
     Icon = "circle-check",
@@ -572,12 +586,19 @@ NotifyHighlightSection:Toggle({
     Default = false,
     Callback = function(state)
         if not notifyInitialized then notifyInitialized = true return end
-        if state then EnableNotify() WindUI:Notify({Title = "Notify", Content = "Enabled", Duration = 2, Icon = "bell"})
-        else DisableNotify() WindUI:Notify({Title = "Notify", Content = "Disabled", Duration = 2, Icon = "bell-off"}) end
+        if state then 
+            EnableNotify() 
+            WindUI:Notify({Title = "Notify", Content = "Enabled", Duration = 2, Icon = "bell"})
+            NOEV:Highlight() 
+            EVDRP:Highlight() 
+        else 
+            DisableNotify() 
+            WindUI:Notify({Title = "Notify", Content = "Disabled", Duration = 2, Icon = "bell-off"}) 
+        end
     end
 })
 
-NotifyHighlightSection:Dropdown({
+EVDRP = NotifyHighlightSection:Dropdown({
     Title = "Events",
     Values = {"Notify Gun Drop", "Notify Role Changes"},
     Value = {"Notify Gun Drop", "Notify Role Changes"},
@@ -586,12 +607,14 @@ NotifyHighlightSection:Dropdown({
     Callback = function(v) SelectedNotifyElements = v end
 })
 
-NotifyHighlightSection:Button({
+NotifyOnce = NotifyHighlightSection:Button({
     Title = "Notify Once",
     Justify = "Center",
     IconAlign = "Right",
     Icon = "bell",
     Callback = function()
+        NotifyOnce:Highlight()
+        EVDRP:Highlight()
         if not matchActive then
             WindUI:Notify({Title = "Notify Once", Content = "Not in match", Duration = 3, Icon = "circle-x"})
             return
@@ -617,7 +640,7 @@ NotifyHighlightSection:Button({
     end
 })
 
-NotifyHighlightSection:Divider()
+NotifyHighlightSection:Space()
 
 local highlightActive = false
 local quickHighlight = false
@@ -787,7 +810,7 @@ end
 
 Players.PlayerRemoving:Connect(RemoveHighlight)
 
-NotifyHighlightSection:Toggle({
+HighlightToggle = NotifyHighlightSection:Toggle({
     Title = "Highlight Elements",
     Desc = "Highlights the selected elements in-match.",
     Icon = "circle-check",
@@ -798,6 +821,8 @@ NotifyHighlightSection:Toggle({
         if state then
             EnableESP()
             WindUI:Notify({Title = "Highlights", Content = "Enabled", Duration = 3, Icon = "highlighter"})
+            HighlightToggle:Highlight()
+            HIDRP:Highlight()
         else
             DisableESP()
             WindUI:Notify({Title = "Highlights", Content = "Disabled", Duration = 3, Icon = "circle-x"})
@@ -805,7 +830,7 @@ NotifyHighlightSection:Toggle({
     end
 })
 
-NotifyHighlightSection:Dropdown({
+HIDRP = NotifyHighlightSection:Dropdown({
     Title = "Elements",
     Values = {"Highlight Players", "Highlight Gun", "Highlight Coins"},
     Value = {"Highlight Players"},
@@ -817,12 +842,14 @@ NotifyHighlightSection:Dropdown({
     end
 })
 
-NotifyHighlightSection:Button({
+QHI = NotifyHighlightSection:Button({
     Title = "Quick Highlight",
     Justify = "Center",
     IconAlign = "Right",
     Icon = "zap",
     Callback = function()
+        QHI:Highlight()
+        HIDRP:Highlight()
         if highlightActive then
             WindUI:Notify({Title = "Quick Highlight", Content = "Highlights are already on!", Duration = 3, Icon = "highlighter"})
             return
