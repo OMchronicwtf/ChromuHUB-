@@ -264,6 +264,8 @@ local smoothedTargetPos = nil
 local SMOOTH_FACTOR = 0.3
 local aimDot = nil
 local aimDotConnection = nil
+local lastVisibleTime = 0
+local VISIBILITY_THRESHOLD = 0.5
 local lastStableTime = 0
 local STABILITY_THRESHOLD = 0.3
 local lastAimPos = nil
@@ -390,11 +392,17 @@ local function CreateAimDot()
     end)
 end
 
-local function UpdateAimDot(pos, blocked, stable)
+local function UpdateAimDot(pos, blocked, visibleReady, stable)
     if not aimDot then CreateAimDot() end
     aimDot.Position = pos
-    aimDot.Transparency = blocked and 0.8 or (stable and 0.1 or 0.3)
-    aimDot.Color = stable and Color3.fromRGB(0, 255, 0) or Color3.fromRGB(147, 0, 255)
+    aimDot.Transparency = blocked and 0.8 or (visibleReady and stable and 0.1 or 0.3)
+    if visibleReady and stable then
+        aimDot.Color = Color3.fromRGB(0, 255, 0)
+    elseif visibleReady then
+        aimDot.Color = Color3.fromRGB(0, 200, 255)
+    else
+        aimDot.Color = Color3.fromRGB(147, 0, 255)
+    end
 end
 
 local function RemoveAimDot()
@@ -404,40 +412,66 @@ local function RemoveAimDot()
 end
 
 local function AutoShootLoop()
-    if not CanShoot() then RemoveAimDot() lastStableTime = 0 return end
+    if not CanShoot() then 
+        RemoveAimDot() 
+        lastVisibleTime = 0 
+        lastStableTime = 0 
+        return 
+    end
     local murderer = FindMurderer()
-    if not murderer or not murderer.Character then RemoveAimDot() lastStableTime = 0 return end
+    if not murderer or not murderer.Character then 
+        RemoveAimDot() 
+        lastVisibleTime = 0 
+        lastStableTime = 0 
+        return 
+    end
 
     local pos = GetPredictedPosition(murderer)
-    if not pos then RemoveAimDot() lastStableTime = 0 return end
+    if not pos then 
+        RemoveAimDot() 
+        lastVisibleTime = 0 
+        lastStableTime = 0 
+        return 
+    end
 
+    local now = tick()
     local blocked = not HasClearLineOfSight(murderer)
-    local stable = false
+    local visibleReady = false
+    if not blocked then
+        if lastVisibleTime == 0 then
+            lastVisibleTime = now
+        elseif now - lastVisibleTime >= VISIBILITY_THRESHOLD then
+            visibleReady = true
+        end
+    else
+        lastVisibleTime = 0
+    end
 
+    local stable = false
     if lastAimPos and (pos - lastAimPos).Magnitude <= AIM_STABILITY_DISTANCE then
-        if tick() - lastStableTime >= STABILITY_THRESHOLD then
+        if now - lastStableTime >= STABILITY_THRESHOLD then
             stable = true
         end
     else
-        lastStableTime = tick()
+        lastStableTime = now
     end
     lastAimPos = pos
 
-    UpdateAimDot(pos, blocked, stable)
+    UpdateAimDot(pos, blocked, visibleReady, stable)
 
-    if blocked or not stable then return end
+    if blocked or not visibleReady or not stable then return end
     if not LocalPlayer.Character:FindFirstChild("Gun") then EquipGun() return end
 
-    local now = tick()
     if now - lastShootTime >= SHOOT_INTERVAL and ShootAt(pos) then
         lastShootTime = now
+        lastVisibleTime = 0
         lastStableTime = 0
     end
 end
 
 MainSection:Toggle({
-    Title = "Shoot Assist (Locked)",
-    Desc = "Waits 0.3s of perfect aim before shooting.",
+    Title = "Shoot Assist (Imperfect)",
+    Desc = "Attempts to automatically shoot the murderer.",
     Icon = "circle-check",
     Type = "Checkbox",
     Default = false,
@@ -447,11 +481,12 @@ MainSection:Toggle({
         if state then
             if autoShootConnection then autoShootConnection:Disconnect() end
             autoShootConnection = RunService.Heartbeat:Connect(function() pcall(AutoShootLoop) end)
-            WindUI:Notify({Title = "Shoot Assist", Content = "Enabled - 0.3s Lock", Duration = 3, Icon = "target"})
+            WindUI:Notify({Title = "Shoot Assist", Content = "Enabled", Duration = 3, Icon = "target"})
         else
             if autoShootConnection then autoShootConnection:Disconnect() autoShootConnection = nil end
             RemoveAimDot()
             lastShootTime = 0
+            lastVisibleTime = 0
             lastStableTime = 0
             lastAimPos = nil
             WindUI:Notify({Title = "Shoot Assist", Content = "Disabled", Duration = 2, Icon = "circle-x"})
@@ -789,7 +824,7 @@ NotifyHighlightSection:Button({
     Icon = "zap",
     Callback = function()
         if highlightActive then
-            WindUI:Notify({Title = "Quick Highlight", Content = "Highlights is already on!", Duration = 3, Icon = "highlighter"})
+            WindUI:Notify({Title = "Quick Highlight", Content = "Highlights are already on!", Duration = 3, Icon = "highlighter"})
             return
         end
 
@@ -806,7 +841,7 @@ NotifyHighlightSection:Button({
         StartSharedUpdater()
         UpdateVisuals()
 
-        WindUI:Notify({Title = "Quick Highlight", Content = "Activated for 5 seconds!", Duration = 5, Icon = "zap"})
+        WindUI:Notify({Title = "Quick Highlight", Content = "Highlighting for 5 seconds...", Duration = 5, Icon = "zap"})
 
         task.delay(5, function()
             quickHighlight = false
@@ -815,7 +850,6 @@ NotifyHighlightSection:Button({
                 renderConn:Disconnect()
                 renderConn = nil
             end
-            WindUI:Notify({Title = "Quick Highlight", Content = "Expired", Duration = 2, Icon = "circle-x"})
         end)
     end
 })
@@ -829,6 +863,5 @@ UISettingsSection:Keybind({
     Value = "L",
     Callback = function(v) Window:SetToggleKey(Enum.KeyCode[v]) end
 })
-
 
 MainTab:Select()
