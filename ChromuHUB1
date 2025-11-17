@@ -423,7 +423,7 @@ local function AutoShootLoop()
 end
 
 SHAS = MainSection:Toggle({
-    Title = "Shoot Assist (Imperfect)",
+    Title = "Shoot Assist (Inaccurate)",
     Desc = "Attempts to automatically shoot the murderer.",
     Icon = "circle-check",
     Type = "Checkbox",
