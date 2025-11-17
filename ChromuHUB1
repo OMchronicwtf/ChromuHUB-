@@ -835,7 +835,7 @@ local UISettingsSection = SettingsTab:Section({Title = "UI Settings", Box = true
 UISettingsSection:Keybind({
     Title = "UI Toggle Key",
     Desc = "Key to open/close the UI",
-    Value = "L",
+    Value = "G",
     Callback = function(v) Window:SetToggleKey(Enum.KeyCode[v]) end
 })
 
