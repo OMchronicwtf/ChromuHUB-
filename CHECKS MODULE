@@ -1,29 +1,18 @@
---[[─────────────────────────────────────────────────────────────────────────────
-    ChronosMaster.lua — CORE (Boolean State Version)
-─────────────────────────────────────────────────────────────────────────────]]--
-
---// SERVICES //--
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
 
 local LocalPlayer = Players.LocalPlayer
 
---// REMOTES //--
 local Remotes = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Gameplay")
 local PlayerDataChanged = Remotes:WaitForChild("PlayerDataChanged")
 local LoadingMapEvent = Remotes:WaitForChild("LoadingMap")
 
---// CORE STATE //--
-local Roles = {}                 -- [name] = {Role = "", Dead = bool}
+local Roles = {}
 local CurrentMapName = nil
 local CurrentGameMode = nil
 local MatchActive = false
 
-
---====================================================
--- UPDATE MAP NAME
---====================================================
 local function UpdateMapName()
     for _, obj in Workspace:GetChildren() do
         if (obj:IsA("Model") or obj:IsA("Folder")) and obj:GetAttribute("MapID") then
@@ -34,37 +23,26 @@ local function UpdateMapName()
     CurrentMapName = nil
 end
 
-
---====================================================
--- GAMEMODE REMOTE
---====================================================
 LoadingMapEvent.OnClientEvent:Connect(function(mode)
     if typeof(mode) == "string" then
         CurrentGameMode = mode
     end
 end)
 
-
---====================================================
--- PLAYER DATA CHANGED = MAIN SYNC
---====================================================
 PlayerDataChanged.OnClientEvent:Connect(function(update)
     if typeof(update) ~= "table" then return end
 
-    -- empty = round ended
     if not next(update) then
         MatchActive = false
         Roles = {}
         return
     end
 
-    -- match begins
     if not MatchActive then
         MatchActive = true
         UpdateMapName()
     end
 
-    -- merge incoming data
     for name, data in pairs(update) do
         if typeof(data) == "table" then
             Roles[name] = data
@@ -72,10 +50,6 @@ PlayerDataChanged.OnClientEvent:Connect(function(update)
     end
 end)
 
-
---====================================================
--- MAP ADDED = begin polling GetPlayerData until valid
---====================================================
 Workspace.ChildAdded:Connect(function(child)
     if child:GetAttribute("MapID") then
         UpdateMapName()
@@ -84,7 +58,6 @@ Workspace.ChildAdded:Connect(function(child)
             local remote = ReplicatedStorage:FindFirstChild("GetPlayerData", true)
             if not remote then return end
 
-            -- keep hitting it every .5 until data returns
             for _ = 1, 20 do
                 local s, d = pcall(remote.InvokeServer, remote)
                 if s and typeof(d) == "table" and next(d) then
@@ -98,10 +71,6 @@ Workspace.ChildAdded:Connect(function(child)
     end
 end)
 
-
---====================================================
--- MAP REMOVED = fallback end-of-round
---====================================================
 Workspace.ChildRemoved:Connect(function(child)
     if child:GetAttribute("MapID") then
         MatchActive = false
@@ -110,14 +79,9 @@ Workspace.ChildRemoved:Connect(function(child)
     end
 end)
 
-
---====================================================
--- FIRST EXECUTION SYNC
---====================================================
 task.spawn(function()
     UpdateMapName()
 
-    -- map on startup? force getplayerdata
     if CurrentMapName then
         local remote = ReplicatedStorage:FindFirstChild("GetPlayerData", true)
         if remote and remote:IsA("RemoteFunction") then
@@ -134,7 +98,6 @@ task.spawn(function()
         end
     end
 
-    -- force gamemode invoke
     local ok, gm = pcall(function()
         return LoadingMapEvent:InvokeServer()
     end)
@@ -143,10 +106,6 @@ task.spawn(function()
     end
 end)
 
-
---====================================================
--- 3-SECOND FALLBACK
---====================================================
 task.spawn(function()
     task.wait(3)
     local remote = ReplicatedStorage:FindFirstChild("GetPlayerData", true)
@@ -160,13 +119,8 @@ task.spawn(function()
     end
 end)
 
-
---====================================================
--- EXPORT BOOLEANS + INFO
---====================================================
 return {
 
-    -- BASIC MATCH STATE
     HasMap = function()
         return CurrentMapName ~= nil
     end,
@@ -183,8 +137,6 @@ return {
         return MatchActive
     end,
 
-
-    -- LOCAL PLAYER STATE
     AmInMatch = function()
         return Roles[LocalPlayer.Name] ~= nil
     end,
@@ -204,8 +156,6 @@ return {
         return info and info.Dead or false
     end,
 
-
-    -- GENERIC ROLE LOOKUP
     Roles = function()
         return Roles
     end,
