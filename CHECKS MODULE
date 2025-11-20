@@ -1,0 +1,224 @@
+--[[─────────────────────────────────────────────────────────────────────────────
+    ChronosMaster.lua — CORE (Boolean State Version)
+─────────────────────────────────────────────────────────────────────────────]]--
+
+--// SERVICES //--
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Workspace = game:GetService("Workspace")
+
+local LocalPlayer = Players.LocalPlayer
+
+--// REMOTES //--
+local Remotes = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Gameplay")
+local PlayerDataChanged = Remotes:WaitForChild("PlayerDataChanged")
+local LoadingMapEvent = Remotes:WaitForChild("LoadingMap")
+
+--// CORE STATE //--
+local Roles = {}                 -- [name] = {Role = "", Dead = bool}
+local CurrentMapName = nil
+local CurrentGameMode = nil
+local MatchActive = false
+
+
+--====================================================
+-- UPDATE MAP NAME
+--====================================================
+local function UpdateMapName()
+    for _, obj in Workspace:GetChildren() do
+        if (obj:IsA("Model") or obj:IsA("Folder")) and obj:GetAttribute("MapID") then
+            CurrentMapName = obj.Name
+            return
+        end
+    end
+    CurrentMapName = nil
+end
+
+
+--====================================================
+-- GAMEMODE REMOTE
+--====================================================
+LoadingMapEvent.OnClientEvent:Connect(function(mode)
+    if typeof(mode) == "string" then
+        CurrentGameMode = mode
+    end
+end)
+
+
+--====================================================
+-- PLAYER DATA CHANGED = MAIN SYNC
+--====================================================
+PlayerDataChanged.OnClientEvent:Connect(function(update)
+    if typeof(update) ~= "table" then return end
+
+    -- empty = round ended
+    if not next(update) then
+        MatchActive = false
+        Roles = {}
+        return
+    end
+
+    -- match begins
+    if not MatchActive then
+        MatchActive = true
+        UpdateMapName()
+    end
+
+    -- merge incoming data
+    for name, data in pairs(update) do
+        if typeof(data) == "table" then
+            Roles[name] = data
+        end
+    end
+end)
+
+
+--====================================================
+-- MAP ADDED = begin polling GetPlayerData until valid
+--====================================================
+Workspace.ChildAdded:Connect(function(child)
+    if child:GetAttribute("MapID") then
+        UpdateMapName()
+
+        task.spawn(function()
+            local remote = ReplicatedStorage:FindFirstChild("GetPlayerData", true)
+            if not remote then return end
+
+            -- keep hitting it every .5 until data returns
+            for _ = 1, 20 do
+                local s, d = pcall(remote.InvokeServer, remote)
+                if s and typeof(d) == "table" and next(d) then
+                    Roles = d
+                    MatchActive = true
+                    break
+                end
+                task.wait(0.5)
+            end
+        end)
+    end
+end)
+
+
+--====================================================
+-- MAP REMOVED = fallback end-of-round
+--====================================================
+Workspace.ChildRemoved:Connect(function(child)
+    if child:GetAttribute("MapID") then
+        MatchActive = false
+        Roles = {}
+        CurrentMapName = nil
+    end
+end)
+
+
+--====================================================
+-- FIRST EXECUTION SYNC
+--====================================================
+task.spawn(function()
+    UpdateMapName()
+
+    -- map on startup? force getplayerdata
+    if CurrentMapName then
+        local remote = ReplicatedStorage:FindFirstChild("GetPlayerData", true)
+        if remote and remote:IsA("RemoteFunction") then
+            local s, d = pcall(remote.InvokeServer, remote)
+            if s and typeof(d) == "table" then
+                if next(d) then
+                    Roles = d
+                    MatchActive = true
+                else
+                    MatchActive = false
+                    Roles = {}
+                end
+            end
+        end
+    end
+
+    -- force gamemode invoke
+    local ok, gm = pcall(function()
+        return LoadingMapEvent:InvokeServer()
+    end)
+    if ok and typeof(gm) == "string" then
+        CurrentGameMode = gm
+    end
+end)
+
+
+--====================================================
+-- 3-SECOND FALLBACK
+--====================================================
+task.spawn(function()
+    task.wait(3)
+    local remote = ReplicatedStorage:FindFirstChild("GetPlayerData", true)
+    if remote then
+        local s, d = pcall(remote.InvokeServer, remote)
+        if s and typeof(d) == "table" and next(d) then
+            Roles = d
+            MatchActive = true
+            UpdateMapName()
+        end
+    end
+end)
+
+
+--====================================================
+-- EXPORT BOOLEANS + INFO
+--====================================================
+return {
+
+    -- BASIC MATCH STATE
+    HasMap = function()
+        return CurrentMapName ~= nil
+    end,
+
+    MapName = function()
+        return CurrentMapName
+    end,
+
+    GameMode = function()
+        return CurrentGameMode
+    end,
+
+    MatchActive = function()
+        return MatchActive
+    end,
+
+
+    -- LOCAL PLAYER STATE
+    AmInMatch = function()
+        return Roles[LocalPlayer.Name] ~= nil
+    end,
+
+    MyRole = function()
+        local info = Roles[LocalPlayer.Name]
+        return info and info.Role or nil
+    end,
+
+    IsAlive = function()
+        local info = Roles[LocalPlayer.Name]
+        return info and not info.Dead or false
+    end,
+
+    IsDead = function()
+        local info = Roles[LocalPlayer.Name]
+        return info and info.Dead or false
+    end,
+
+
+    -- GENERIC ROLE LOOKUP
+    Roles = function()
+        return Roles
+    end,
+
+    GetRole = function(name)
+        name = name or LocalPlayer.Name
+        local info = Roles[name]
+        return info and info.Role or nil
+    end,
+
+    PlayerDead = function(name)
+        name = name or LocalPlayer.Name
+        local info = Roles[name]
+        return info and info.Dead or false
+    end,
+}
