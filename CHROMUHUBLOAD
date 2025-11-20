@@ -1,0 +1,53 @@
+local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
+
+WindUI:AddTheme({
+    Name = "E-vil Royal",
+    Accent = WindUI:Gradient({
+        ["0"] = { Color = Color3.fromHex("#360273"), Transparency = 0 },
+        ["100"] = { Color = Color3.fromHex("#004d57"), Transparency = 0 }
+    }, { Rotation = 45 }),
+    Background = WindUI:Gradient({
+        ["0"] = { Color = Color3.fromHex("#360273"), Transparency = 0 },
+        ["100"] = { Color = Color3.fromHex("#004d57"), Transparency = 0 }
+    }, { Rotation = 45 }),
+    Dialog = Color3.fromHex("#1a1a1d"),
+    Outline = Color3.fromHex("#FFD700"),
+    Text = Color3.fromHex("#FFFFFF"),
+    Placeholder = Color3.fromHex("#c0a763"),
+    Button = Color3.fromHex("#411b65"),
+    Icon = Color3.fromHex("#FFD700")
+})
+
+WindUI:SetTheme("E-vil Royal")
+
+local Window = WindUI:CreateWindow({
+    Title = "Chronos x Da7muHUB",
+    Icon = "moon-star",
+    Author = "by @wtfchronic & @da7mu",
+    Folder = "ChronosHUB",
+    Size = UDim2.fromOffset(580, 460),
+    MinSize = Vector2.new(560, 350),
+    MaxSize = Vector2.new(850, 560),
+    Transparent = false,
+    Theme = "E-vil Royal",
+    Resizable = true,
+    SideBarWidth = 200,
+    BackgroundImageTransparency = 0.3,
+    HideSearchBar = false,
+    ScrollBarEnabled = true,
+    NewElements = true,
+})
+
+Window:EditOpenButton({
+    Title = "ChromuHUB",
+    Icon = "moon",
+    CornerRadius = UDim.new(0, 16),
+    StrokeThickness = 2,
+    Color = ColorSequence.new(Color3.fromHex("#574094"), Color3.fromHex("#FFD700")),
+    OnlyMobile = false,
+    Enabled = true,
+    Draggable = true
+})
+
+Window:DisableTopbarButtons({"Fullscreen"})
+Window:Tag({Title = "DEV", Color = Color3.fromHex("#FFD700"), Radius = 13})
