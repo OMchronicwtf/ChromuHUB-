@@ -51,3 +51,7 @@ Window:EditOpenButton({
 
 Window:DisableTopbarButtons({"Fullscreen"})
 Window:Tag({Title = "DEV", Color = Color3.fromHex("#FFD700"), Radius = 13})
+
+_G.WindUIWindow = Window
+
+return true
