@@ -1,5 +1,4 @@
 -- CHECKS MODULE - Ultimate MM2 Match Detection (2025)
--- Paste ONLY this entire code into the raw file above
 
 local Players           = game:GetService("Players")
 local Workspace         = game:GetService("Workspace")
@@ -14,8 +13,14 @@ local MatchActive         = false
 local LastSuccessfulPull  = 0
 local IsPulling           = false
 
--- NEW: global toggle
-local Enabled = false
+-- NEW: reference counter instead of single toggle
+local EnableCount = 0
+local Enabled     = false
+
+
+-----------------------------------------------------------
+-- Helper functions
+-----------------------------------------------------------
 
 local function FindGetPlayerData()
     if GetPlayerDataRemote and GetPlayerDataRemote.Parent then
@@ -40,19 +45,17 @@ local function UpdateMapName()
 end
 
 local function PullPlayerData()
-    -- NEW: do not even try unless toggled & map exists
-    if not Enabled or not CurrentMapName then 
-        return RolesCache 
+    -- NEW: only pull when enabled + map exists
+    if not Enabled or not CurrentMapName then
+        return RolesCache
     end
 
-    if IsPulling then 
-        return RolesCache 
-    end
+    if IsPulling then return RolesCache end
     IsPulling = true
 
     local remote = FindGetPlayerData()
     if not remote then 
-        IsPulling = false 
+        IsPulling = false
         return RolesCache 
     end
 
@@ -67,13 +70,20 @@ local function PullPlayerData()
             MatchActive = false
         end
     end
+
     IsPulling = false
     return RolesCache
 end
 
+
+-----------------------------------------------------------
+-- Auto polling
+-----------------------------------------------------------
+
 local AutoUpdater
 local function StartAutoUpdate()
     if AutoUpdater then return end
+
     AutoUpdater = RunService.Heartbeat:Connect(function()
         if not Enabled then return end
         if not CurrentMapName then return end
@@ -91,6 +101,11 @@ local function StartAutoUpdate()
         end
     end)
 end
+
+
+-----------------------------------------------------------
+-- Workspace connections
+-----------------------------------------------------------
 
 Workspace.ChildAdded:Connect(function(c)
     if c:GetAttribute("MapID") then
@@ -115,8 +130,40 @@ task.spawn(function()
     StartAutoUpdate()
 end)
 
+
+-----------------------------------------------------------
+-- Enable logic (reference counted)
+-----------------------------------------------------------
+
+local function UpdateEnabledState()
+    Enabled = (EnableCount > 0)
+
+    if Enabled then
+        UpdateMapName()
+        PullPlayerData()
+    else
+        MatchActive = false
+        RolesCache = {}
+    end
+end
+
+
+-----------------------------------------------------------
 -- Public API
+-----------------------------------------------------------
+
 local Match = {}
+
+-- NEW: reference-counted toggles
+function Match.Enable()
+    EnableCount += 1
+    UpdateEnabledState()
+end
+
+function Match.Disable()
+    EnableCount = math.max(EnableCount - 1, 0)
+    UpdateEnabledState()
+end
 
 function Match.GetPD()           return PullPlayerData() end
 function Match.Roles()           return RolesCache end
@@ -136,18 +183,6 @@ function Match.FindMurderer()
         if data.Role == "Murderer" and not data.Dead then
             return Players:FindFirstChild(name)
         end
-    end
-end
-
--- NEW: toggle
-function Match.SetEnabled(state : boolean)
-    Enabled = state and true or false
-    if Enabled then
-        UpdateMapName()
-        PullPlayerData()
-    else
-        MatchActive = false
-        RolesCache   = {}
     end
 end
 
