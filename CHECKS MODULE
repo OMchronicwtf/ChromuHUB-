@@ -1,174 +1,123 @@
-local Players = game:GetService("Players")
+-- CHECKS MODULE - Ultimate MM2 Match Detection (2025)
+-- Paste ONLY this entire code into the raw file above
+
+local Players           = game:GetService("Players")
+local Workspace         = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local Workspace = game:GetService("Workspace")
+local RunService        = game:GetService("RunService")
+local LocalPlayer       = Players.LocalPlayer
 
-local LocalPlayer = Players.LocalPlayer
+local GetPlayerDataRemote = nil
+local RolesCache          = {}
+local CurrentMapName      = nil
+local MatchActive         = false
+local LastSuccessfulPull  = 0
+local IsPulling           = false
 
-local Remotes = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Gameplay")
-local PlayerDataChanged = Remotes:WaitForChild("PlayerDataChanged")
-local LoadingMapEvent = Remotes:WaitForChild("LoadingMap")
-
-local Roles = {}
-local CurrentMapName = nil
-local CurrentGameMode = nil
-local MatchActive = false
+local function FindGetPlayerData()
+    if GetPlayerDataRemote and GetPlayerDataRemote.Parent then
+        return GetPlayerDataRemote
+    end
+    GetPlayerDataRemote = ReplicatedStorage:FindFirstChild("GetPlayerData", true)
+    if GetPlayerDataRemote and GetPlayerDataRemote:IsA("RemoteFunction") then
+        return GetPlayerDataRemote
+    end
+    return nil
+end
 
 local function UpdateMapName()
     for _, obj in Workspace:GetChildren() do
         if (obj:IsA("Model") or obj:IsA("Folder")) and obj:GetAttribute("MapID") then
             CurrentMapName = obj.Name
-            return
+            return true
         end
     end
     CurrentMapName = nil
+    return false
 end
 
-LoadingMapEvent.OnClientEvent:Connect(function(mode)
-    if typeof(mode) == "string" then
-        CurrentGameMode = mode
-    end
-end)
+local function PullPlayerData()
+    if IsPulling then return RolesCache end
+    IsPulling = true
+    local remote = FindGetPlayerData()
+    if not remote then IsPulling = false return RolesCache end
 
-PlayerDataChanged.OnClientEvent:Connect(function(update)
-    if typeof(update) ~= "table" then return end
-
-    if not next(update) then
-        MatchActive = false
-        Roles = {}
-        return
-    end
-
-    if not MatchActive then
-        MatchActive = true
-        UpdateMapName()
-    end
-
-    for name, data in pairs(update) do
-        if typeof(data) == "table" then
-            Roles[name] = data
+    local success, data = pcall(remote.InvokeServer, remote)
+    if success and typeof(data) == "table" then
+        if next(data) then
+            RolesCache = data
+            MatchActive = true
+            LastSuccessfulPull = tick()
+        else
+            RolesCache = {}
+            MatchActive = false
         end
     end
-end)
+    IsPulling = false
+    return RolesCache
+end
 
-Workspace.ChildAdded:Connect(function(child)
-    if child:GetAttribute("MapID") then
-        UpdateMapName()
-
-        task.spawn(function()
-            local remote = ReplicatedStorage:FindFirstChild("GetPlayerData", true)
-            if not remote then return end
-
-            for _ = 1, 20 do
-                local s, d = pcall(remote.InvokeServer, remote)
-                if s and typeof(d) == "table" and next(d) then
-                    Roles = d
-                    MatchActive = true
-                    break
-                end
-                task.wait(0.5)
+local AutoUpdater
+local function StartAutoUpdate()
+    if AutoUpdater then return end
+    AutoUpdater = RunService.Heartbeat:Connect(function()
+        if not MatchActive then
+            if tick() - LastSuccessfulPull > 2 then
+                PullPlayerData()
+                UpdateMapName()
             end
-        end)
+            return
+        end
+        if tick() - LastSuccessfulPull >= 0.5 then
+            PullPlayerData()
+        end
+    end)
+end
+
+Workspace.ChildAdded:Connect(function(c)
+    if c:GetAttribute("MapID") then
+        UpdateMapName()
+        PullPlayerData()
     end
 end)
 
-Workspace.ChildRemoved:Connect(function(child)
-    if child:GetAttribute("MapID") then
+Workspace.ChildRemoved:Connect(function(c)
+    if c:GetAttribute("MapID") then
         MatchActive = false
-        Roles = {}
+        RolesCache = {}
         CurrentMapName = nil
     end
 end)
 
 task.spawn(function()
+    task.wait(2)
     UpdateMapName()
-
-    if CurrentMapName then
-        local remote = ReplicatedStorage:FindFirstChild("GetPlayerData", true)
-        if remote and remote:IsA("RemoteFunction") then
-            local s, d = pcall(remote.InvokeServer, remote)
-            if s and typeof(d) == "table" then
-                if next(d) then
-                    Roles = d
-                    MatchActive = true
-                else
-                    MatchActive = false
-                    Roles = {}
-                end
-            end
-        end
-    end
-
-    local ok, gm = pcall(function()
-        return LoadingMapEvent:InvokeServer()
-    end)
-    if ok and typeof(gm) == "string" then
-        CurrentGameMode = gm
-    end
+    PullPlayerData()
+    StartAutoUpdate()
 end)
 
-task.spawn(function()
-    task.wait(3)
-    local remote = ReplicatedStorage:FindFirstChild("GetPlayerData", true)
-    if remote then
-        local s, d = pcall(remote.InvokeServer, remote)
-        if s and typeof(d) == "table" and next(d) then
-            Roles = d
-            MatchActive = true
-            UpdateMapName()
+-- Public API
+local Match = {}
+
+function Match.GetPD()           return PullPlayerData() end
+function Match.Roles()           return RolesCache end
+function Match.MyRole()          return RolesCache[LocalPlayer.Name] and RolesCache[LocalPlayer.Name].Role end
+function Match.AmISheriffOrHero()
+    local r = Match.MyRole()
+    return r == "Sheriff" or r == "Hero"
+end
+function Match.IsAlive()         local i = RolesCache[LocalPlayer.Name] return i and not i.Dead end
+function Match.MatchActive()     return MatchActive and next(RolesCache) end
+function Match.HasMap()          return CurrentMapName ~= nil end
+function Match.MapName()         return CurrentMapName end
+function Match.GetRole(p)        p = p or LocalPlayer.Name return RolesCache[p] and RolesCache[p].Role end
+function Match.IsPlayerDead(p)   p = p or LocalPlayer.Name return RolesCache[p] and RolesCache[p].Dead end
+function Match.FindMurderer()
+    for name, data in pairs(RolesCache) do
+        if data.Role == "Murderer" and not data.Dead then
+            return Players:FindFirstChild(name)
         end
     end
-end)
+end
 
-return {
-
-    HasMap = function()
-        return CurrentMapName ~= nil
-    end,
-
-    MapName = function()
-        return CurrentMapName
-    end,
-
-    GameMode = function()
-        return CurrentGameMode
-    end,
-
-    MatchActive = function()
-        return MatchActive
-    end,
-
-    AmInMatch = function()
-        return Roles[LocalPlayer.Name] ~= nil
-    end,
-
-    MyRole = function()
-        local info = Roles[LocalPlayer.Name]
-        return info and info.Role or nil
-    end,
-
-    IsAlive = function()
-        local info = Roles[LocalPlayer.Name]
-        return info and not info.Dead or false
-    end,
-
-    IsDead = function()
-        local info = Roles[LocalPlayer.Name]
-        return info and info.Dead or false
-    end,
-
-    Roles = function()
-        return Roles
-    end,
-
-    GetRole = function(name)
-        name = name or LocalPlayer.Name
-        local info = Roles[name]
-        return info and info.Role or nil
-    end,
-
-    PlayerDead = function(name)
-        name = name or LocalPlayer.Name
-        local info = Roles[name]
-        return info and info.Dead or false
-    end,
-}
+return Match
