@@ -155,5 +155,11 @@ function Match.FindMurderer()
         end
     end
 end
+function Match.HasMaxCoins(p)
+    p = p or LocalPlayer.Name
+    local coins = RolesCache[p] and RolesCache[p].Coins
+    return coins and coins >= 40 or false
+end
+
 
 return Match
