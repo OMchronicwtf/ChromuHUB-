@@ -159,24 +159,32 @@ end
 local CurrentCoins = 0
 local MaxCoinsThisRound = 0
 local HitMaxCoins = false
-local CoinRemote = ReplicatedStorage.Remotes.Gameplay:WaitForChild("CoinCollected")
 
-CoinRemote.OnClientEvent:Connect(function(_, currentCoins, maxCoins, info)
-    CurrentCoins = currentCoins
-    MaxCoinsThisRound = maxCoins
-    HitMaxCoins = (CurrentCoins >= MaxCoinsThisRound)
-end)
+local CoinCollectedRemote = ReplicatedStorage.Remotes.Gameplay:WaitForChild("CoinCollected")
+local CoinsStartedRemote   = ReplicatedStorage.Remotes.Gameplay:WaitForChild("CoinsStarted")
 
-RunService.Heartbeat:Connect(function()
-    if not (Match.MatchActive() and Match.HasMap() and Match.IsAlive()) then
+CoinsStartedRemote.OnClientEvent:Connect(function(data)
+    local coinInfo = data and data.Coin
+    if coinInfo then
+        CurrentCoins = coinInfo.CollectedAmount or 0
+        MaxCoinsThisRound = coinInfo.CollectionLimit
+        HitMaxCoins = (CurrentCoins >= MaxCoinsThisRound)
+    else
         CurrentCoins = 0
         MaxCoinsThisRound = 0
         HitMaxCoins = false
     end
 end)
 
+CoinCollectedRemote.OnClientEvent:Connect(function(_, currentCoins, maxCoins, _)
+    CurrentCoins = currentCoins or CurrentCoins
+    MaxCoinsThisRound = maxCoins or MaxCoinsThisRound
+    HitMaxCoins = (CurrentCoins >= MaxCoinsThisRound)
+end)
+
 function Match.HasMaxCoins(p)
     return HitMaxCoins
 end
+
 
 return Match
