@@ -155,11 +155,28 @@ function Match.FindMurderer()
         end
     end
 end
-function Match.HasMaxCoins(p)
-    p = p or LocalPlayer.Name
-    local coins = RolesCache[p] and RolesCache[p].Coins
-    return coins and coins >= 40 or false
-end
 
+local CurrentCoins = 0
+local MaxCoinsThisRound = 0
+local HitMaxCoins = false
+local CoinRemote = ReplicatedStorage.Remotes.Gameplay:WaitForChild("CoinCollected")
+
+CoinRemote.OnClientEvent:Connect(function(_, currentCoins, maxCoins, info)
+    CurrentCoins = currentCoins
+    MaxCoinsThisRound = maxCoins
+    HitMaxCoins = (CurrentCoins >= MaxCoinsThisRound)
+end)
+
+RunService.Heartbeat:Connect(function()
+    if not (Match.MatchActive() and Match.HasMap() and Match.IsAlive()) then
+        CurrentCoins = 0
+        MaxCoinsThisRound = 0
+        HitMaxCoins = false
+    end
+end)
+
+function Match.HasMaxCoins(p)
+    return HitMaxCoins
+end
 
 return Match
