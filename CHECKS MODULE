@@ -183,7 +183,6 @@ CoinCollectedRemote.OnClientEvent:Connect(function(_, currentCoins, maxCoins, _)
 end)
 
 RunService.Heartbeat:Connect(function()
-    if not (Match.MatchActive() and Match.HasMap() and Match.IsAlive()) then
         CurrentCoins = 0
         MaxCoinsThisRound = 40
         HitMaxCoins = false
